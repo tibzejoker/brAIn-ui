@@ -1,0 +1,8 @@
+{
+  "name": "brAIn-ui",
+  "private": true,
+  "license": "MIT",
+  "description": "brAIn UI nodes — human interfaces.",
+  "scripts": { "build": "pnpm -r build" },
+  "devDependencies": { "@types/node": "^20.11.0", "typescript": "^5.4.0" }
+}
