@@ -177,7 +177,15 @@
         const res = await fetch(`${apiBase}/nodes/${nodeId}/ui/send`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ topic: $topic.value || 'chat.input', content, criticality: parseInt($crit.value) || 3 }),
+          body: JSON.stringify({
+            topic: $topic.value || 'chat.input',
+            content,
+            criticality: parseInt($crit.value) || 3,
+            // Tag with platform=web so messenger bridges (telegram, whatsapp,
+            // discord) can prefix the mirrored message with [web · you] —
+            // same consistency the cross-bridge case already gets.
+            metadata: { platform: 'web', sender: 'you' },
+          }),
         });
         const data = await res.json();
         myMessages.add(data.message_id);
