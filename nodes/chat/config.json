@@ -5,7 +5,9 @@
   "default_authority": 0,
   "default_priority": 5,
   "default_subscriptions": [
-    { "topic": "chat.response.*", "description": "Chat responses from any other node, addressed to the human user via the chat UI." }
+    { "topic": "chat.response", "description": "Chat responses from any other node (exact-topic flavor used by the default seed)." },
+    { "topic": "chat.response.*", "description": "Chat responses from any other node with a sub-topic suffix." },
+    { "topic": "chat.input", "description": "User-side inputs from any source — surfaces messages typed in another chat surface (Telegram, WhatsApp, Discord bridges) inside the web chat UI. Anti-loop drops the node's own publishes." }
   ],
   "default_publishes": ["chat.input"],
   "has_ui": true,
