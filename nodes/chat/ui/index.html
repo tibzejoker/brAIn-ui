@@ -256,12 +256,16 @@
     });
 
     // Poll chat messages
-    let lastCount = 0;
     async function pollMessages() {
       try {
         const res = await fetch(`${apiBase}/nodes/${nodeId}/ui/messages`);
         const messages = await res.json();
-        if (messages.length !== lastCount) { lastCount = messages.length; renderMessages(messages); }
+        // Always re-render — renderMessages dedups via existingIds, so this
+        // is cheap. The old `length !== lastCount` short-circuit broke once
+        // the bus reached the 50-message cap (length stays at 50, new
+        // messages get rotated in but the count condition stays equal —
+        // freshly typed messages stopped appearing until a full refresh).
+        renderMessages(messages);
         $status.textContent = `${messages.length} msgs`;
         $status.style.background = 'rgba(34,197,94,0.2)';
         $status.style.color = '#22c55e';
@@ -322,13 +326,15 @@
     }
 
     // Poll ALL bus messages for the monitor
-    let lastBusCount = 0;
     async function pollBus() {
       if ($busPanel.classList.contains('hidden')) return;
       try {
         const res = await fetch(`${apiBase}/network/messages?last=50`);
         const msgs = await res.json();
-        if (msgs.length !== lastBusCount) { lastBusCount = msgs.length; renderBusEvents(msgs); }
+        // Same caveat as pollMessages — once the bus hits the 50-message
+        // cap the count stops changing, so a count guard would freeze the
+        // monitor. renderBusEvents is a full replace anyway, cheap enough.
+        renderBusEvents(msgs);
       } catch (e) { /* silent */ }
     }
 
