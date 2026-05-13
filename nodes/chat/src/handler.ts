@@ -8,7 +8,6 @@ import type { NodeHandler, TextPayload } from "@brain/sdk";
  */
 export const handler: NodeHandler = (ctx) => {
   if (ctx.messages.length === 0) {
-    ctx.sleep([{ type: "any" }]);
     return Promise.resolve();
   }
 
