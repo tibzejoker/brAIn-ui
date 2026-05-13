@@ -279,11 +279,25 @@
     function renderMessages(messages) {
       if (messages.length === 0) { $empty.style.display = 'flex'; return; }
       $empty.style.display = 'none';
+      // Capture BEFORE appending so the scrollHeight reflects the
+      // pre-render state. Auto-stick to bottom only when the user was
+      // already near it — otherwise we'd yank them back every poll
+      // while they're scrolled up reading history.
+      const scrollEl = document.getElementById('messages-scroll');
+      const STICK_THRESHOLD_PX = 80;
+      const wasNearBottom = scrollEl
+        ? (scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight) < STICK_THRESHOLD_PX
+        : true;
       const existing = $messages.querySelectorAll('.msg-row');
       const existingIds = new Set(Array.from(existing).map(el => el.dataset.id));
+      // Any of the newly-rendered rows belong to the local user? If so
+      // we force a scroll-to-bottom regardless of where the viewport
+      // sits — they expect to see their own message land.
+      let addedSelfMessage = false;
       for (const msg of messages) {
         if (existingIds.has(msg.id)) continue;
         const isSelf = msg.from === nodeId || myMessages.has(msg.id);
+        if (isSelf) addedSelfMessage = true;
         const time = new Date(msg.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         const payload = msg.payload || {};
         const rawContent = payload.content || payload.title || JSON.stringify(payload);
@@ -321,8 +335,7 @@
 
         $messages.appendChild(row);
       }
-      const scrollEl = document.getElementById('messages-scroll');
-      if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
+      if ((wasNearBottom || addedSelfMessage) && scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
     }
 
     // Poll ALL bus messages for the monitor
