@@ -123,6 +123,12 @@
     .act-btn:hover { background: var(--elevated); color: var(--text); border-color: var(--border-strong); }
     .act-btn.speaking { color: var(--warning); border-color: var(--warning); }
     .act-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    /* The 🔊 button only makes sense when a tts node is on the network.
+       We render it on every message but gate visibility on a single body
+       class, toggled by loadNodeNames() — so it appears/disappears live as
+       the tts node is spawned or killed, with no per-row DOM surgery. */
+    .act-btn[data-action="speak"] { display: none; }
+    body.tts-available .act-btn[data-action="speak"] { display: inline-flex; }
 
     .input-bar { padding: 12px 16px; border-top: 1px solid var(--border); background: var(--surface); display: flex; gap: 8px; max-width: 720px; margin: 0 auto; width: 100%; }
     .input-bar input { flex: 1; padding: 10px 14px; border-radius: var(--radius); background: var(--bg); font-size: 13px; }
@@ -196,11 +202,15 @@
         const res = await fetch(`${apiBase}/network`);
         const data = await res.json();
         for (const n of data.nodes) { nodeNames[n.id] = n.name; }
-        // Auto-pick the first running tts node so the 🔊 buttons can route
-        // to it. If multiple exist we just take whichever shows up first —
-        // the user can refine later if it becomes a need.
-        const tts = data.nodes.find(n => n.type === 'tts' && n.state !== 'stopped');
+        // Auto-pick a running tts node so the 🔊 buttons can route to it.
+        // Require a LOCAL one (no owner_hub): we invoke via this API's
+        // /nodes/:id/ui/send, which only knows nodes on THIS machine — a
+        // peer hub's tts would 404. If only a remote tts exists we leave
+        // the button hidden rather than offer one we can't reach.
+        const tts = data.nodes.find(n => n.type === 'tts' && n.state !== 'stopped' && !n.owner_hub);
         ttsNodeId = tts?.id ?? null;
+        // Drive button visibility off whether we actually found one.
+        document.body.classList.toggle('tts-available', ttsNodeId !== null);
       } catch(e) {}
     }
 
