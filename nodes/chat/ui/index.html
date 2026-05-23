@@ -130,15 +130,36 @@
     .act-btn[data-action="speak"] { display: none; }
     body.tts-available .act-btn[data-action="speak"] { display: inline-flex; }
 
-    .input-bar { padding: 12px 16px; border-top: 1px solid var(--border); background: var(--surface); display: flex; gap: 8px; max-width: 720px; margin: 0 auto; width: 100%; }
-    .input-bar input { flex: 1; padding: 10px 14px; border-radius: var(--radius); background: var(--bg); font-size: 13px; }
-    .input-bar button { padding: 10px 20px; border-radius: var(--radius); border: 1px solid #5b21b6; background: #6d28d9; color: #ffffff; font-size: 13px; font-weight: 500; cursor: pointer; }
-    .input-bar button:hover { filter: brightness(1.12); }
-    .input-bar button:disabled { opacity: 0.45; cursor: default; }
+    /* Composer: a single rounded "pill" containing the input AND the send
+       button (Claude-style). The button is absolutely positioned inside
+       so it can never overflow on a narrow viewport — the input shrinks
+       around it instead. font-size:16px on the input is load-bearing on
+       iOS: anything <16px makes Safari auto-zoom on focus. */
+    .input-bar { padding: 12px 16px; padding-bottom: max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--surface); max-width: 720px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+    .composer { position: relative; width: 100%; min-width: 0; }
+    .composer input {
+      width: 100%; box-sizing: border-box;
+      padding: 12px 52px 12px 16px;
+      border-radius: 999px; border: 1px solid var(--border); background: var(--bg);
+      font-size: 16px; line-height: 20px; color: var(--text);
+      outline: none; transition: border-color .12s ease;
+    }
+    .composer input:focus { border-color: var(--border-strong); }
+    .composer button {
+      position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+      width: 36px; height: 36px; padding: 0;
+      border-radius: 50%; border: 1px solid var(--border-strong);
+      background: var(--accent); color: var(--accent-fg);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 18px; line-height: 1; font-weight: 600; cursor: pointer;
+    }
+    .composer button:hover { filter: brightness(1.08); }
+    .composer button:disabled { opacity: 0.4; cursor: default; }
+    .composer button svg { width: 18px; height: 18px; display: block; }
 
-    .config { padding: 6px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--text-dim); max-width: 720px; margin: 0 auto; width: 100%; }
-    .config input, .config select { padding: 4px 8px; border-radius: var(--radius-sm); font-size: 11px; }
-    .config select { width: 200px; cursor: pointer; }
+    .config { padding: 6px 16px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; font-size: 11px; color: var(--text-dim); max-width: 720px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+    .config input, .config select { padding: 4px 8px; border-radius: var(--radius-sm); font-size: 11px; min-width: 0; }
+    .config select { flex: 1 1 140px; max-width: 200px; cursor: pointer; }
 
     /* Bus monitor panel */
     .bus-panel { width: 320px; border-left: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; overflow: hidden; }
@@ -157,6 +178,11 @@
   <div class="header">
     <h1>brAIn Chat</h1>
     <span class="badge" id="status">connecting...</span>
+    <button class="toggle" id="new-chat" title="New conversation (forgets context on every channel)" aria-label="New conversation">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:14px;height:14px;vertical-align:-2px;margin-right:4px">
+        <path d="M12 5v14"></path><path d="M5 12h14"></path>
+      </svg>New
+    </button>
     <button class="toggle active" id="bus-toggle">Bus Monitor</button>
   </div>
 
@@ -176,14 +202,24 @@
       </div>
 
       <div class="input-bar">
-        <input type="text" id="input" placeholder="Type a message..." autocomplete="off">
-        <button id="send">Send</button>
+        <div class="composer">
+          <input type="text" id="input" placeholder="Type a message..." autocomplete="off" autocapitalize="sentences" enterkeyhint="send">
+          <button id="send" type="button" aria-label="Send">
+            <!-- Arrow-up glyph, same shape as Claude's send affordance. -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 19V5"></path><path d="M5 12l7-7 7 7"></path>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
 
     <div class="bus-panel" id="bus-panel">
       <div class="bus-header">
         <span>Bus Events</span>
+        <label style="font-size:10px;font-weight:normal;display:flex;align-items:center;gap:4px;cursor:pointer;margin-left:auto;margin-right:8px;">
+          <input type="checkbox" id="bus-infra" style="margin:0;"> infra
+        </label>
         <span id="bus-count">0</span>
       </div>
       <div class="bus-events" id="bus-events"></div>
@@ -191,11 +227,20 @@
   </div>
 
   <script>
-    const nodeId = window.location.pathname.split('/nodes/')[1]?.split('/ui')[0];
+    const nodeId = window.location.pathname.split('/node/')[1]?.split('/ui')[0];
     const apiBase = window.location.origin;
     let myMessages = new Set();
     const nodeNames = {};
     let ttsNodeId = null;
+    // "Cut-line" for the New-chat affordance. We don't (and can't) prune the
+    // bus history server-side — that would lose useful debug context for the
+    // Bus Monitor pane. Instead we keep a per-node-id timestamp in
+    // localStorage and the message renderer filters out anything older. A
+    // chat.reset event published on the bus from ANY channel (the local
+    // ↻ New button now, a discord /reset command later) bumps the cut-line
+    // so all surfaces follow.
+    const RESET_KEY = `chat-reset-at:${nodeId}`;
+    let lastResetAt = Number(localStorage.getItem(RESET_KEY)) || 0;
 
     async function loadNodeNames() {
       try {
@@ -203,11 +248,13 @@
         const data = await res.json();
         for (const n of data.nodes) { nodeNames[n.id] = n.name; }
         // Auto-pick a running tts node so the 🔊 buttons can route to it.
-        // Require a LOCAL one (no owner_hub): we invoke via this API's
-        // /nodes/:id/ui/send, which only knows nodes on THIS machine — a
-        // peer hub's tts would 404. If only a remote tts exists we leave
-        // the button hidden rather than offer one we can't reach.
-        const tts = data.nodes.find(n => n.type === 'tts' && n.state !== 'stopped' && !n.owner_hub);
+        // /node/:id/* always proxies via NATS, so a peer hub's tts is just as
+        // reachable as a local one — we treat local and remote on equal footing
+        // and tie-break by id so the choice is stable across polls regardless
+        // of the merge order returned by /network.
+        const tts = data.nodes
+          .filter(n => n.type === 'tts' && n.state === 'active')
+          .sort((a, b) => a.id.localeCompare(b.id))[0];
         ttsNodeId = tts?.id ?? null;
         // Drive button visibility off whether we actually found one.
         document.body.classList.toggle('tts-available', ttsNodeId !== null);
@@ -236,24 +283,62 @@
       $busToggle.classList.toggle('active');
     });
 
+    // New conversation: optimistically wipe the visible thread, then ask
+    // the chat node to publish chat.reset on the bus. Every subscriber
+    // (this chat instance, the brain, any future bridge that opts in)
+    // drops its short-term context — the cross-channel sync stays, the
+    // memory does not. We avoid window.confirm() because it blocks the
+    // iframe's runtime in a way the harness frowns upon; instead we use
+    // a soft visual confirmation: double-click required to fire.
+    const $newChat = document.getElementById('new-chat');
+    let armNewChat = 0;
+    $newChat.addEventListener('click', async () => {
+      const now = Date.now();
+      if (now - armNewChat > 1500) {
+        // First click: arm. Re-styles the button as a confirm prompt.
+        armNewChat = now;
+        const original = $newChat.innerHTML;
+        $newChat.classList.add('active');
+        $newChat.innerHTML = 'Confirm?';
+        setTimeout(() => {
+          if (Date.now() - armNewChat >= 1500) {
+            $newChat.classList.remove('active');
+            $newChat.innerHTML = original;
+          }
+        }, 1500);
+        return;
+      }
+      // Second click within 1.5s: actually fire.
+      armNewChat = 0;
+      lastResetAt = Date.now();
+      localStorage.setItem(RESET_KEY, String(lastResetAt));
+      $messages.innerHTML = '';
+      $empty.style.display = 'flex';
+      $newChat.classList.remove('active');
+      $newChat.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:14px;height:14px;vertical-align:-2px;margin-right:4px"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>New`;
+      try {
+        await fetch(`${apiBase}/node/${nodeId}/chat.reset`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(''),
+        });
+      } catch (e) { /* offline reset still cleared the UI; brain will catch up next time */ }
+    });
+
+    // Infra toggle: re-poll immediately so the change is instant.
+    document.getElementById('bus-infra').addEventListener('change', () => { pollBus(); });
+
     // Send message
     async function sendMessage() {
       const content = $input.value.trim();
       if (!content) return;
       $send.disabled = true;
       try {
-        const res = await fetch(`${apiBase}/nodes/${nodeId}/ui/send`, {
+        const topic = $topic.value || 'chat.input';
+        const res = await fetch(`${apiBase}/node/${nodeId}/${topic}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            topic: $topic.value || 'chat.input',
-            content,
-            criticality: parseInt($crit.value) || 3,
-            // Tag with platform=web so messenger bridges (telegram, whatsapp,
-            // discord) can prefix the mirrored message with [web · you] —
-            // same consistency the cross-bridge case already gets.
-            metadata: { platform: 'web', sender: 'you' },
-          }),
+          body: JSON.stringify(content),
         });
         const data = await res.json();
         myMessages.add(data.message_id);
@@ -308,15 +393,10 @@
             .replace(/^>\s?/gm, '')
             .replace(/^#+\s+/gm, '')
             .trim();
-          await fetch(`${apiBase}/nodes/${ttsNodeId}/ui/send`, {
+          await fetch(`${apiBase}/node/${ttsNodeId}/tts.speak`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              topic: 'tts.speak',
-              content: plain,
-              criticality: 4,
-              from: 'system.chat-ui',
-            }),
+            body: JSON.stringify(plain),
           });
         } catch (e) { /* ignore */ }
         setTimeout(() => { btn.classList.remove('speaking'); }, 1500);
@@ -326,15 +406,31 @@
     // Poll chat messages
     async function pollMessages() {
       try {
-        const res = await fetch(`${apiBase}/nodes/${nodeId}/ui/messages`);
+        const res = await fetch(`${apiBase}/node/${nodeId}/messages`);
         const messages = await res.json();
+        // First, observe any chat.reset events that landed since the last
+        // poll. We bump the cut-line to the LATEST reset timestamp seen so
+        // a reset from another channel (or even another tab) propagates.
+        // The events themselves are then dropped from rendering — they're
+        // control messages, not conversation turns.
+        let observed = lastResetAt;
+        for (const m of messages) {
+          if (m.topic === 'chat.reset' && m.timestamp > observed) observed = m.timestamp;
+        }
+        if (observed > lastResetAt) {
+          lastResetAt = observed;
+          localStorage.setItem(RESET_KEY, String(lastResetAt));
+          // Drop already-rendered rows so the visible thread restarts.
+          $messages.innerHTML = '';
+        }
+        const visible = messages.filter(m => m.topic !== 'chat.reset' && m.timestamp > lastResetAt);
         // Always re-render — renderMessages dedups via existingIds, so this
         // is cheap. The old `length !== lastCount` short-circuit broke once
         // the bus reached the 50-message cap (length stays at 50, new
         // messages get rotated in but the count condition stays equal —
         // freshly typed messages stopped appearing until a full refresh).
-        renderMessages(messages);
-        $status.textContent = `${messages.length} msgs`;
+        renderMessages(visible);
+        $status.textContent = `${visible.length} msgs`;
         $status.style.background = 'var(--elevated)';
         $status.style.color = 'var(--success)';
       } catch (e) {
@@ -406,11 +502,17 @@
       if ((wasNearBottom || addedSelfMessage) && scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
     }
 
-    // Poll ALL bus messages for the monitor
+    // High-frequency infra topics that drown the monitor — hidden unless the
+    // "infra" toggle is on. Server-side exclude so they never hit the wire.
+    const INFRA_EXCLUDE = 'brain.network.*,llm.usage';
+
+    // Poll bus messages for the monitor
     async function pollBus() {
       if ($busPanel.classList.contains('hidden')) return;
       try {
-        const res = await fetch(`${apiBase}/network/messages?last=50`);
+        const showInfra = document.getElementById('bus-infra').checked;
+        const qs = showInfra ? 'last=50' : `last=50&exclude=${encodeURIComponent(INFRA_EXCLUDE)}`;
+        const res = await fetch(`${apiBase}/network/messages?${qs}`);
         const msgs = await res.json();
         // Same caveat as pollMessages — once the bus hits the 50-message
         // cap the count stops changing, so a count guard would freeze the

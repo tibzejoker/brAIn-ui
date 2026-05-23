@@ -12,7 +12,7 @@ export const handler: NodeHandler = (ctx) => {
   }
 
   // Store incoming responses in state for the UI to read
-  const history = (ctx.state.history ?? []) as Array<{
+  let history = (ctx.state.history ?? []) as Array<{
     from: string;
     topic: string;
     content: string;
@@ -20,6 +20,15 @@ export const handler: NodeHandler = (ctx) => {
   }>;
 
   for (const msg of ctx.messages) {
+    // `chat.reset` is a network-wide "forget the current conversation"
+    // signal: the UI's New-chat button publishes it, but any other surface
+    // (discord, telegram, whatsapp, …) is free to too. The chat node wipes
+    // its accumulated history and skips storing the reset event itself —
+    // it's an in-band control message, not a conversation turn.
+    if (msg.topic === "chat.reset") {
+      history = [];
+      continue;
+    }
     const payload = msg.payload as TextPayload;
     history.push({
       from: msg.from,
