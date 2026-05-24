@@ -7,7 +7,6 @@
   "default_subscriptions": [
     { "topic": "chat.response", "description": "Chat responses from any other node (exact-topic flavor used by the default seed).", "internal": true },
     { "topic": "chat.response.*", "description": "Chat responses from any other node with a sub-topic suffix.", "internal": true },
-    { "topic": "chat.input", "description": "User-side inputs from any source — surfaces messages typed in another chat surface (Telegram, WhatsApp, Discord bridges) inside the web chat UI. Anti-loop drops the node's own publishes.", "internal": true },
     { "topic": "chat.reset", "description": "Cross-channel signal to forget the current conversation. The UI's New-chat button publishes it; every chat-aware node (brain, bridges) is expected to wipe its short-term context.", "internal": true }
   ],
   "default_publishes": ["chat.input", "chat.reset"],
