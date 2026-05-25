@@ -8,7 +8,11 @@
     "inputs": {
       "incoming_message": {
         "description": "Text from another node (typically the brain or a bridge) to display in the chat UI.",
-        "inputSchema": { "type": "string" }
+        "inputSchema": {
+          "type": "object",
+          "properties": { "content": { "type": "string" } },
+          "required": ["content"]
+        }
       },
       "reset_signal": {
         "description": "Forget the current conversation — wipes the visible buffer in this chat instance. Published by the New-chat button on any chat-aware node.",
