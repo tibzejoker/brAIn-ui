@@ -130,6 +130,11 @@
     .act-btn[data-action="speak"] { display: none; }
     body.tts-available .act-btn[data-action="speak"] { display: inline-flex; }
 
+    /* Auto-say toggles in the header — same body-class gating as the 🔊
+       button, so they vanish cleanly when no tts node is on the network. */
+    .autosay-toggle { display: none; }
+    body.tts-available .autosay-toggle { display: inline-flex; }
+
     /* Composer: a single rounded "pill" containing the input AND the send
        button (Claude-style). The button is absolutely positioned inside
        so it can never overflow on a narrow viewport — the input shrinks
@@ -183,6 +188,8 @@
         <path d="M12 5v14"></path><path d="M5 12h14"></path>
       </svg>New
     </button>
+    <button class="toggle autosay-toggle" id="autosay-user" title="Auto-say every message you send through the chat tts" aria-pressed="false">🎙 You</button>
+    <button class="toggle autosay-toggle" id="autosay-response" title="Auto-say every reply that arrives" aria-pressed="false">🔊 Replies</button>
     <button class="toggle" id="bus-toggle">Bus Monitor</button>
   </div>
 
@@ -328,6 +335,61 @@
     // Infra toggle: re-poll immediately so the change is instant.
     document.getElementById('bus-infra').addEventListener('change', () => { pollBus(); });
 
+    // === Auto-say toggles ============================================
+    // When at least one tts node is on the network, two header buttons
+    // (`#autosay-user`, `#autosay-response`) become visible. Persist the
+    // user's choice per chat node so a refresh keeps the setting.
+    // `pageLoadAt` is the cut-off: we only auto-speak messages that
+    // arrived AFTER the page loaded, otherwise a refresh on a chatty
+    // history would dump the whole transcript through the speaker.
+    const pageLoadAt = Date.now();
+    const AUTOSAY_USER_KEY = `autosay-user:${nodeId}`;
+    const AUTOSAY_RESP_KEY = `autosay-response:${nodeId}`;
+    let autosayUser = localStorage.getItem(AUTOSAY_USER_KEY) === '1';
+    let autosayResponse = localStorage.getItem(AUTOSAY_RESP_KEY) === '1';
+    const $autosayUser = document.getElementById('autosay-user');
+    const $autosayResp = document.getElementById('autosay-response');
+    function syncAutosayUI() {
+      $autosayUser.classList.toggle('active', autosayUser);
+      $autosayUser.setAttribute('aria-pressed', String(autosayUser));
+      $autosayResp.classList.toggle('active', autosayResponse);
+      $autosayResp.setAttribute('aria-pressed', String(autosayResponse));
+    }
+    syncAutosayUI();
+    $autosayUser.addEventListener('click', () => {
+      autosayUser = !autosayUser;
+      localStorage.setItem(AUTOSAY_USER_KEY, autosayUser ? '1' : '0');
+      syncAutosayUI();
+    });
+    $autosayResp.addEventListener('click', () => {
+      autosayResponse = !autosayResponse;
+      localStorage.setItem(AUTOSAY_RESP_KEY, autosayResponse ? '1' : '0');
+      syncAutosayUI();
+    });
+
+    // Strip markdown so the synthesizer doesn't read "asterisk asterisk".
+    // Shared between the 🔊 button and the auto-say toggles.
+    function plainForSpeech(text) {
+      return text
+        .replace(/```[\s\S]*?```/g, '')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/[*_~]+/g, '')
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        .replace(/^>\s?/gm, '')
+        .replace(/^#+\s+/gm, '')
+        .trim();
+    }
+    async function speak(text) {
+      if (!ttsNodeId || !text) return;
+      try {
+        await fetch(`${apiBase}/node/${ttsNodeId}/tts.speak`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(plainForSpeech(text)),
+        });
+      } catch (e) { /* ignore — speech is best-effort */ }
+    }
+
     // Send message
     async function sendMessage() {
       const content = $input.value.trim();
@@ -344,6 +406,7 @@
         myMessages.add(data.message_id);
         $input.value = '';
         pollMessages();
+        if (autosayUser) void speak(content);
       } catch (e) { /* send failed */ }
       $send.disabled = false;
       $input.focus();
@@ -498,6 +561,21 @@
         }
 
         $messages.appendChild(row);
+
+        // Auto-say toggled-on replies. Restricted to non-self messages
+        // that arrived after the page loaded — otherwise a refresh of a
+        // long history would queue every past brain answer through the
+        // speaker. `myMessages.has(msg.id)` already filters out our own
+        // tts.speak pings that loop back through the bus.
+        if (
+          autosayResponse
+          && reply
+          && !isSelf
+          && ttsNodeId
+          && msg.timestamp >= pageLoadAt
+        ) {
+          void speak(reply);
+        }
       }
       if ((wasNearBottom || addedSelfMessage) && scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
     }
