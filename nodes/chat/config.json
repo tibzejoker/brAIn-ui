@@ -4,11 +4,37 @@
   "tags": ["ui", "chat", "human-interface"],
   "default_authority": 0,
   "default_priority": 5,
-  "default_subscriptions": [
-    { "topic": "chat.response", "description": "Chat responses from any other node (exact-topic flavor used by the default seed).", "internal": true },
-    { "topic": "chat.response.*", "description": "Chat responses from any other node with a sub-topic suffix.", "internal": true },
-    { "topic": "chat.reset", "description": "Cross-channel signal to forget the current conversation. The UI's New-chat button publishes it; every chat-aware node (brain, bridges) is expected to wipe its short-term context.", "internal": true }
-  ],
+  "ports": {
+    "inputs": {
+      "incoming_message": {
+        "description": "Text from another node (typically the brain or a bridge) to display in the chat UI.",
+        "inputSchema": { "type": "string" }
+      },
+      "reset_signal": {
+        "description": "Forget the current conversation — wipes the visible buffer in this chat instance. Published by the New-chat button on any chat-aware node.",
+        "inputSchema": { "type": "object" }
+      }
+    },
+    "outputs": {
+      "outgoing_message": {
+        "description": "Text the human user typed in the chat UI, published for the brain and any bridge to react to."
+      },
+      "reset_broadcast": {
+        "description": "Cross-channel reset signal — fired when the user clicks the New-chat button so every other chat-aware node wipes its short-term context too."
+      }
+    }
+  },
+  "default_port_bindings": {
+    "inputs": {
+      "incoming_message": ["chat.response", "chat.response.*"],
+      "reset_signal": ["chat.reset"]
+    },
+    "outputs": {
+      "outgoing_message": ["chat.input"],
+      "reset_broadcast": ["chat.reset"]
+    }
+  },
+  "default_subscriptions": [],
   "default_publishes": ["chat.input", "chat.reset"],
   "has_ui": true,
   "supports_transport": ["process"]
