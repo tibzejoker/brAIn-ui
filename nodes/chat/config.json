@@ -1,7 +1,11 @@
 {
   "name": "chat",
   "description": "Human chat interface. Provides a web UI where users can type messages that get published to the network, and see responses from other nodes.",
-  "tags": ["ui", "chat", "human-interface"],
+  "tags": [
+    "ui",
+    "chat",
+    "human-interface"
+  ],
   "default_authority": 0,
   "default_priority": 5,
   "ports": {
@@ -10,13 +14,21 @@
         "description": "Text from another node (typically the brain or a bridge) to display in the chat UI.",
         "inputSchema": {
           "type": "object",
-          "properties": { "content": { "type": "string" } },
-          "required": ["content"]
+          "properties": {
+            "content": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "content"
+          ]
         }
       },
       "reset_signal": {
         "description": "Forget the current conversation — wipes the visible buffer in this chat instance. Published by the New-chat button on any chat-aware node.",
-        "inputSchema": { "type": "object" }
+        "inputSchema": {
+          "type": "object"
+        }
       }
     },
     "outputs": {
@@ -30,16 +42,25 @@
   },
   "default_port_bindings": {
     "inputs": {
-      "incoming_message": ["chat.response", "chat.response.*"],
-      "reset_signal": ["chat.reset"]
+      "incoming_message": [
+        "chat.response",
+        "chat.response.*"
+      ],
+      "reset_signal": [
+        "chat.reset"
+      ]
     },
     "outputs": {
-      "outgoing_message": ["chat.input"],
-      "reset_broadcast": ["chat.reset"]
+      "outgoing_message": [
+        "chat.input"
+      ],
+      "reset_broadcast": [
+        "chat.reset"
+      ]
     }
   },
-  "default_subscriptions": [],
-  "default_publishes": ["chat.input", "chat.reset"],
   "has_ui": true,
-  "supports_transport": ["process"]
+  "supports_transport": [
+    "process"
+  ]
 }
