@@ -527,7 +527,19 @@
         if (isSelf) addedSelfMessage = true;
         const time = new Date(msg.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         const payload = msg.payload || {};
-        const rawContent = payload.content || payload.title || JSON.stringify(payload);
+        let rawContent = payload.content || payload.title || JSON.stringify(payload);
+        // Spoken utterances (perception stack → intent.detected) arrive as
+        // correlator JSON — render them as reported speech, not a raw dump.
+        if (msg.topic === 'intent.detected') {
+          try {
+            const it = JSON.parse(rawContent);
+            if (it && typeof it.text === 'string') {
+              const target = it.target_kind === 'camera' ? ' (to you)'
+                : (it.target_kind === 'person' && it.target_name) ? ` (to ${it.target_name})` : '';
+              rawContent = `🎤 **${it.source_name || 'Someone'}**${target}: ${it.text}`;
+            }
+          } catch { /* not JSON — keep as-is */ }
+        }
         const { thinking, reply } = parseThinking(rawContent);
         const sender = msg.from === nodeId ? 'you' : nodeName(msg.from);
         const senderColor = isSelf ? 'inherit' : `hsl(${topicHue(sender)}, 70%, 65%)`;
